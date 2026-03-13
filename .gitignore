@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # build output
 dist/
 
@@ -22,3 +23,20 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+=======
+node_modules
+.astro
+dist
+*.zip
+build_log*.txt
+sync_output.txt
+categorize_log.txt
+credentials.json
+exotic-equator
+gullible-gravity
+tender-transit
+.DS_Store
+.env
+.env.*
+!.env.example
+>>>>>>> 194a018340e3ffa41f9f2714b64c01e9779ce8a2

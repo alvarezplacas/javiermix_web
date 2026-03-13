@@ -1,5 +1,6 @@
 services:
   db:
+<<<<<<< HEAD
     image: mariadb:latest
     container_name: javiermix_db
     restart: always
@@ -13,3 +14,19 @@ services:
 
 volumes:
   db_data:
+=======
+    image: postgres:16-alpine
+    container_name: alvarezplacas_db
+    environment:
+      POSTGRES_USER: alvarez_admin
+      POSTGRES_PASSWORD: alvarez_password
+      POSTGRES_DB: alvarezplacas
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/infrastructure/db-schema.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  postgres_data:
+>>>>>>> 194a018340e3ffa41f9f2714b64c01e9779ce8a2
