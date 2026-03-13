@@ -1,18 +1,23 @@
 import { defineMiddleware } from 'astro:middleware';
+import { query } from './lib/db';
 
-export const onRequest = defineMiddleware(async (context, next) => {
+export const onRequest = defineMiddleware(async (context: any, next: any) => {
     // Definimos las rutas que NO deben ser bloqueadas por mantenimiento
     const isPublicStatic = context.url.pathname.startsWith('/_astro') || context.url.pathname.startsWith('/favicon');
     const isMaintenancePage = context.url.pathname === '/mantenimiento';
     const isAdmin = context.url.pathname.startsWith('/admin');
     const isApi = context.url.pathname.startsWith('/api');
 
-    // En un entorno real, esto vendría de una DB o Redis.
-    // Para simplificar el "static/admin option" sin DB activa aún, usamos una cookie o variable de entorno simualda
-    // Pero el usuario pidió una opción admin, así que usaremos un chequeo que el admin pueda disparar.
-    
-    // Simulación de check de mantenimiento (esto debería ser dinámico)
-    const isMaintenanceActive = process.env.MAINTENANCE_MODE === 'true';
+    // Consulta real a la base de datos
+    let isMaintenanceActive = false;
+    try {
+        const result = await query("SELECT value FROM site_settings WHERE key = 'maintenance_mode'");
+        if (result && result.rows && result.rows.length > 0) {
+            isMaintenanceActive = result.rows[0].value === 'true';
+        }
+    } catch (e) {
+        console.error('Error consultando mantenimiento en DB:', e);
+    }
 
     if (isMaintenanceActive && !isMaintenancePage && !isAdmin && !isApi && !isPublicStatic) {
         return context.redirect('/mantenimiento');

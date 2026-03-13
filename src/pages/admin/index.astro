@@ -151,19 +151,43 @@ const recentOrders = [
         const priceToggle = document.getElementById('priceToggle');
         const maintToggle = document.getElementById('maintToggle');
         
-        // Cargar estado inicial
+        // Cargar estado inicial desde el servidor
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const settings = await res.json();
+                
+                if (priceToggle) priceToggle.checked = settings.show_prices !== 'false';
+                if (maintToggle) maintToggle.checked = settings.maintenance_mode === 'true';
+            } catch (err) {
+                console.error('Error cargando ajustes:', err);
+            }
+        }
+
+        async function updateSetting(key, value) {
+            try {
+                await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key, value: String(value) })
+                });
+            } catch (err) {
+                console.error('Error actualizando ajuste:', err);
+                alert('No se pudo guardar el cambio en el servidor.');
+            }
+        }
+        
         if (priceToggle) {
-            priceToggle.checked = localStorage.getItem('admin_show_prices') !== 'false';
-            priceToggle.addEventListener('change', (e) => localStorage.setItem('admin_show_prices', e.target.checked));
+            priceToggle.addEventListener('change', (e) => updateSetting('show_prices', e.target.checked));
         }
 
         if (maintToggle) {
-            maintToggle.checked = localStorage.getItem('maintenance_mode') === 'true';
             maintToggle.addEventListener('change', (e) => {
-                localStorage.setItem('maintenance_mode', e.target.checked);
-                alert(e.target.checked ? 'Modo Mantenimiento ACTIVADO' : 'Sitio web ONLINE');
+                updateSetting('maintenance_mode', e.target.checked);
             });
         }
+
+        loadSettings();
     </script>
     </div>
 
