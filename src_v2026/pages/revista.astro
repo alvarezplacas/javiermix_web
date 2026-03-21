@@ -8,10 +8,14 @@ import { desc } from 'drizzle-orm';
 
 export const prerender = false;
 
-// Fetch articles from database
-const dbArticles = await db.select()
-  .from(magazine)
-  .orderBy(desc(magazine.created_at));
+let dbArticles: any[] = [];
+try {
+  dbArticles = await db.select()
+    .from(magazine)
+    .orderBy(desc(magazine.created_at));
+} catch (error) {
+  console.error("Database fetch error for magazine:", error);
+}
 
 function resolveMediaURL(url: string | null): string {
   if (!url) return '/img/placeholder.jpg';
@@ -28,13 +32,14 @@ function resolveMediaURL(url: string | null): string {
 
 // Map database articles to the UI format
 const articles = dbArticles.map(art => {
-  // Estimate read time
-  const wordCount = art.content_html.replace(/<[^>]*>/g, '').split(/\s+/).length;
+  // Estimate read time safely
+  const content = art.content_html || "";
+  const wordCount = content.replace(/<[^>]*>/g, '').split(/\s+/).length;
   const readTime = Math.max(1, Math.ceil(wordCount / 200));
 
   return {
-    title: art.title,
-    excerpt: art.content_html.replace(/<[^>]*>/g, '').substring(0, 180) + '...',
+    title: art.title || "Ensayo Visual",
+    excerpt: content.replace(/<[^>]*>/g, '').substring(0, 180) + '...',
     image: resolveMediaURL(art.featured_image),
     readTime: `${readTime} min`,
     link: `/revista/${art.slug}`,
