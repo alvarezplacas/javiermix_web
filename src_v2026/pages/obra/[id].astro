@@ -4,6 +4,7 @@ import Header from '../../components/Header.astro';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadArtworkMetadata } from '../../utils/metadata.js';
+import ExifReader from 'exifreader';
 import FramingStudio from '../../components/FramingStudio.astro';
 
 export const prerender = true;
@@ -17,7 +18,7 @@ export async function getStaticPaths() {
 		
 		const metadataMap = loadArtworkMetadata();
 
-		folders.forEach(folder => {
+		for (const folder of folders) {
 			const folderPath = path.join(seriesPath, folder);
 			const items = fs.readdirSync(folderPath).filter(f => f.endsWith('.avif') || f.endsWith('.jpg') || f.endsWith('.png'));
 			
@@ -34,7 +35,7 @@ export async function getStaticPaths() {
 			const folderSlug = folder.split('_').map(word => word.toUpperCase()).join(' ').toLowerCase().replace(/ /g, '-');
             const serieName = folder.split('_').map(word => word.toUpperCase()).join(' ');
 			
-			mainImages.forEach(mainImg => {
+			for (const mainImg of mainImages) {
 				const mainNumMatch = mainImg.match(/\d+/);
 				const mainNum = mainNumMatch ? mainNumMatch[0] : null;
 				let roomImgMatch = null;
@@ -55,7 +56,30 @@ export async function getStaticPaths() {
 				if (roomImgMatch) matchedOtherImages.add(roomImgMatch);
 				
                 const meta = metadataMap.get(mainImg);
-                const titleText = meta?.title || (mainNum ? mainNum : mainImg.split('.')[0]);
+                let titleText = meta?.title || (mainNum ? mainNum : mainImg.split('.')[0]);
+                let fiche = meta?.fiche || null;
+                
+                try {
+                    const metaPath = path.join(folderPath, mainImg);
+                    const tags = await ExifReader.load(metaPath);
+                    if (tags['Title']?.description) titleText = tags['Title'].description;
+                    else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
+                    
+                    const description = tags['Description']?.description || tags['Caption/Abstract']?.description;
+                    if (description || tags['Model']?.description) {
+                        fiche = {
+                            story: description || '',
+                            camera: tags['Model']?.description || '',
+                            lens: tags['LensModel']?.description || '',
+                            iso: tags['ISOSpeedRatings']?.description || tags['ISO']?.value?.toString() || '',
+                            shutterspeed: tags['ExposureTime']?.description || '',
+                            aperture: tags['FNumber']?.description ? `f/${tags['FNumber'].description}` : '',
+                            year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) : '',
+                            location: tags['City']?.description || ''
+                        };
+                    }
+                } catch(e) {}
+
                 const cleanTitle = titleText.toLowerCase().replace(/ /g, '-');
                 const uniqueId = `${folderSlug}-${cleanTitle}`;
 
@@ -81,16 +105,35 @@ export async function getStaticPaths() {
                         precio: sizes.length > 0 ? sizes[0].price : 250,
                         etiqueta: "Fine Art Print",
                         meta: meta || null,
+                        fiche: fiche,
                         sizes: sizes
                     }
                 });
-			});
+			}
 			
-			// Imágenes huérfanas
 			const standalone = otherImages.filter(f => !matchedOtherImages.has(f));
-			standalone.forEach(img => {
+			for (const img of standalone) {
                 const meta = metadataMap.get(img);
-                const titleText = meta?.title || img.split('.')[0];
+                let titleText = meta?.title || img.split('.')[0];
+                let fiche = meta?.fiche || null;
+                
+                try {
+                    const metaPath = path.join(folderPath, img);
+                    const tags = await ExifReader.load(metaPath);
+                    if (tags['Title']?.description) titleText = tags['Title'].description;
+                    else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
+                    
+                    const description = tags['Description']?.description || tags['Caption/Abstract']?.description;
+                    if (description || tags['Model']?.description) {
+                        fiche = {
+                            story: description || '',
+                            camera: tags['Model']?.description || '',
+                            lens: tags['LensModel']?.description || '',
+                            year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) : ''
+                        };
+                    }
+                } catch(e) {}
+
                 const cleanTitle = titleText.toLowerCase().replace(/ /g, '-');
                 const uniqueId = `${folderSlug}-${cleanTitle}`;
 
@@ -116,16 +159,17 @@ export async function getStaticPaths() {
                         precio: standaloneSizes.length > 0 ? standaloneSizes[0].price : 250,
                         etiqueta: "Fine Art Print",
                         meta: meta || null,
+                        fiche: fiche,
                         sizes: standaloneSizes
                     }
                 });
-			});
-		});
+			}
+		}
 	}
 	return paths;
 }
 
-const { title, serieName, coverImage, roomImage, precio, etiqueta, meta, sizes = [] } = Astro.props;
+const { title, serieName, coverImage, roomImage, precio, etiqueta, meta, fiche, sizes = [] } = Astro.props;
 
 // Phone format for WhatsApp link
 const whatsappNumber = "5491100000000"; // Replace con el real luego
@@ -195,7 +239,9 @@ const waLink = `https://wa.me/${whatsappNumber}?text=Hola,%20estoy%20interesado%
         <div class="tab-content" id="tab-historia" style="display: block;">
           <div class="prose-content">
             <h2 class="prose-title">La Historia detrás de la Imagen</h2>
-            {meta?.description ? (
+            {fiche?.story ? (
+              <p>{fiche.story}</p>
+            ) : meta?.description ? (
               <p>{meta.description}</p>
             ) : (
               <p>Esta pieza de autor es parte de una selección curada rigurosamente. Refleja nuestro compromiso con el legado fotográfico y el diseño contemporáneo, donde cada textura, sombra y captura de luz está cuidada bajo los más altos estándares Fine Art.</p>
@@ -222,17 +268,17 @@ const waLink = `https://wa.me/${whatsappNumber}?text=Hola,%20estoy%20interesado%
                 <div class="shot-item">
                    <i class="fas fa-camera"></i>
                    <span class="label">CÁMARA</span>
-                   <span class="value">{meta?.camera || 'Nikon Fine Art'}</span>
+                   <span class="value">{fiche?.camera || meta?.camera || 'Nikon Fine Art'}</span>
                 </div>
                 <div class="shot-item">
                    <i class="fas fa-circle-notch"></i>
                    <span class="label">LENTE</span>
-                   <span class="value">{meta?.lens || 'Finesse Optics'}</span>
+                   <span class="value">{fiche?.lens || meta?.lens || 'Finesse Optics'}</span>
                 </div>
                 <div class="shot-item">
                    <i class="fas fa-calendar-alt"></i>
                    <span class="label">FECHA</span>
-                   <span class="value">{meta?.date || '2024'}</span>
+                   <span class="value">{fiche?.year || meta?.date || '2024'}</span>
                 </div>
               </div>
             </div>

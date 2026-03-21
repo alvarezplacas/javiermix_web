@@ -5,6 +5,7 @@ import Header from '../../components/Header.astro';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadArtworkMetadata } from '../../utils/metadata.js';
+import ExifReader from 'exifreader';
 import FramingStudio from '../../components/FramingStudio.astro';
 
 export const prerender = true;
@@ -18,7 +19,7 @@ export async function getStaticPaths() {
 		
 		const metadataMap = loadArtworkMetadata();
 
-		paths = folders.map(folder => {
+		paths = await Promise.all(folders.map(async folder => {
 			const folderPath = path.join(seriesPath, folder);
 			const items = fs.readdirSync(folderPath).filter(f => f.endsWith('.avif') || f.endsWith('.jpg') || f.endsWith('.png'));
 			
@@ -35,7 +36,7 @@ export async function getStaticPaths() {
 			let artworks = [];
 			let matchedOtherImages = new Set();
 			
-			mainImages.forEach(mainImg => {
+			for (const mainImg of mainImages) {
 				const mainNumMatch = mainImg.match(/\d+/);
 				const mainNum = mainNumMatch ? mainNumMatch[0] : null;
 				
@@ -57,24 +58,55 @@ export async function getStaticPaths() {
 				if (roomImgMatch) matchedOtherImages.add(roomImgMatch);
 				
 				const meta = metadataMap.get(mainImg);
+                let title = meta?.title || (mainNum ? mainNum : mainImg.split('.')[0]);
+                let fiche = meta?.fiche || null;
+                
+                try {
+                    const metaPath = path.join(folderPath, mainImg);
+                    const tags = await ExifReader.load(metaPath);
+                    if (tags['Title']?.description) title = tags['Title'].description;
+                    else if (tags['ObjectName']?.description) title = tags['ObjectName'].description;
+                    
+                    const description = tags['Description']?.description || tags['Caption/Abstract']?.description;
+                    if (description || tags['Model']?.description) {
+                        fiche = {
+                            story: description || '',
+                            camera: tags['Model']?.description || '',
+                            lens: tags['LensModel']?.description || '',
+                            iso: tags['ISOSpeedRatings']?.description || tags['ISO']?.value?.toString() || '',
+                            shutterspeed: tags['ExposureTime']?.description || '',
+                            aperture: tags['FNumber']?.description ? `f/${tags['FNumber'].description}` : '',
+                            year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) : '',
+                            location: tags['City']?.description || ''
+                        };
+                    }
+                } catch(e) {}
 
 				artworks.push({
 					mainUrl: `/img/Series/${folder}/${mainImg}`,
 					roomUrl: roomImgMatch ? `/img/Series/${folder}/${roomImgMatch}` : null,
-					title: meta?.title || (mainNum ? mainNum : mainImg.split('.')[0]),
-					fiche: meta?.fiche || null
+					title: title,
+					fiche: fiche
 				});
-			});
+			}
 			
 			// Agregar imágenes huérfanas
 			const standalone = otherImages.filter(f => !matchedOtherImages.has(f));
-			standalone.forEach(img => {
+			for (const img of standalone) {
+                let title = img.split('.')[0];
+                try {
+                    const metaPath = path.join(folderPath, img);
+                    const tags = await ExifReader.load(metaPath);
+                    if (tags['Title']?.description) title = tags['Title'].description;
+                    else if (tags['ObjectName']?.description) title = tags['ObjectName'].description;
+                } catch(e) {}
+
 				artworks.push({
 					mainUrl: `/img/Series/${folder}/${img}`,
 					roomUrl: null,
-					title: img.split('.')[0]
+					title: title
 				});
-			});
+			}
 
 			const name = folder.split('_').map(word => word.toUpperCase()).join(' ');
 
@@ -82,7 +114,7 @@ export async function getStaticPaths() {
 				params: { serie: folder },
 				props: { name, artworks }
 			};
-		});
+		}));
 
 		// Excluir series sin obras para no generar rutas vacías
 		paths = paths.filter(p => p.props.artworks.length > 0);
