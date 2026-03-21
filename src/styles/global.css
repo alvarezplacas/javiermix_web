@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /* =========================================================================
    JAVIER MIX - GLOBAL DESIGN SYSTEM (2026)
    Centralized CSS for Typography, Colors, and Reusable Layout Utility Classes
@@ -196,18 +195,3 @@ a:hover {
 .text-burgundy {
 	color: var(--color-burgundy);
 }
-=======
-@import "tailwindcss";
-
-@theme {
-  --color-ferrari-red: #ff2800;
-  --color-jet-black: #0a0a0a;
-  --color-white: #ffffff;
-  --color-primary-light: #ff4d29;
-  --color-primary: #ff2800;
-  --color-secondary: #0a0a0a;
-  --color-text-muted: #888888;
-  --font-montserrat: "Montserrat", sans-serif;
-  --font-sans: "Montserrat", sans-serif;
-}
->>>>>>> 194a018340e3ffa41f9f2714b64c01e9779ce8a2
