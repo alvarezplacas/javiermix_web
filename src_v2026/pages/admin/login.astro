@@ -15,7 +15,6 @@ if (Astro.request.method === 'POST') {
       Astro.cookies.set('admin_jhm_session', 'authenticated_jhm_master', {
         path: '/',
         httpOnly: true,
-        secure: true,
         maxAge: 60 * 60 * 24 * 7 // 1 semana
       });
       return Astro.redirect('/admin');
@@ -42,7 +41,7 @@ if (session && session.value === 'authenticated_jhm_master') {
         <h1 class="logo-text">JHM</h1>
         <p class="subtitle">MÓDULO DE SEGURIDAD</p>
         
-        <form method="POST" class="login-form">
+        <form method="POST" class="login-form" data-astro-reload>
             <div class="input-group">
                 <i class="fas fa-key"></i>
                 <input type="password" name="password" placeholder="CLAVE MAESTRA" autofocus required />
