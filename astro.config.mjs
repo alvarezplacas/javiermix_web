@@ -6,6 +6,9 @@ import node from '@astrojs/node';
 export default defineConfig({
     srcDir: './src_v2026',
     output: 'server',
+    security: {
+        checkOrigin: false
+    },
     adapter: node({
         mode: 'standalone'
     })
