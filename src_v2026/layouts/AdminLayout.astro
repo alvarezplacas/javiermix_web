@@ -40,6 +40,7 @@ const currentPath = Astro.url.pathname;
                     <a href="/admin" class={currentPath === '/admin' ? 'active' : ''}><i class="fas fa-chart-line"></i> Dashboard</a>
                     <a href="/admin/ventas" class={currentPath.startsWith('/admin/ventas') ? 'active' : ''}><i class="fas fa-shopping-cart"></i> Ventas & Órdenes</a>
                     <a href="/admin/certificados" class={currentPath.startsWith('/admin/certificados') ? 'active' : ''}><i class="fas fa-certificate"></i> Certificados A4</a>
+                    <a href="/admin/revista" class={currentPath.startsWith('/admin/revista') ? 'active' : ''}><i class="fas fa-newspaper"></i> Revista Online</a>
                 </div>
 
                 <div class="nav-group">
