@@ -352,9 +352,9 @@ const waLink = `https://wa.me/${whatsappNumber}?text=Hola,%20estoy%20interesado%
           </div>
           
           <div class="action-buttons">
-             <a href={waLink} target="_blank" class="btn-buy" id="btn-buy-link">
-               ADQUIRIR OBRA
-             </a>
+             <button class="btn-buy" id="btn-buy-link">
+               AGREGAR AL CARRITO
+             </button>
              
              <div class="secondary-actions">
                 <button class="btn-favorite" id="btn-like" aria-label="Añadir a favoritos" data-filename={coverImage.split('/').pop()} data-serie={serieName} data-title={title}>
@@ -378,8 +378,60 @@ const waLink = `https://wa.me/${whatsappNumber}?text=Hola,%20estoy%20interesado%
 </Layout>
 
 <script>
+  import { addCartItem } from '../../store/cartStore';
+
   // standard 2026: astro:page-load for View Transitions compatibility
   document.addEventListener('astro:page-load', () => {
+
+    // E-Commerce Logic: Add to Cart
+    const btnBuy = document.getElementById('btn-buy-link') as HTMLButtonElement | null;
+    if (btnBuy) {
+      btnBuy.addEventListener('click', (e) => {
+        e.preventDefault();
+        
+        const activeSizeBtn = document.querySelector('.size-option.active');
+        let price = 250;
+        let sizeLabel = 'Standard';
+        let dimensions = '20 x 30 cm';
+        
+        if (activeSizeBtn) {
+            price = parseInt(activeSizeBtn.getAttribute('data-price') || '0');
+            sizeLabel = activeSizeBtn.getAttribute('data-label') || '';
+            dimensions = activeSizeBtn.getAttribute('data-dimensions') || '';
+        }
+        
+        const artworkId = window.location.pathname.split('/').filter(Boolean).pop() || 'unknown';
+        const titleEl = document.querySelector('.obra-title');
+        const title = titleEl ? (titleEl as HTMLElement).innerText : 'Obra Fine Art';
+        
+        const imgEl = document.getElementById('primary-image');
+        const coverImage = imgEl ? imgEl.getAttribute('src') || '' : '';
+
+        addCartItem({
+          artworkId,
+          title,
+          size: `${sizeLabel} (${dimensions})`,
+          price,
+          image: coverImage
+        });
+
+        // Visual Feedback
+        const originalText = btnBuy.innerHTML;
+        btnBuy.innerHTML = "¡AGREGADO AL CARRITO!";
+        btnBuy.style.backgroundColor = "#4a9e6a";
+        btnBuy.style.color = "white";
+        
+        // Dispatch event for Cart Drawer to listen
+        document.dispatchEvent(new CustomEvent('cartUpdated'));
+        
+        setTimeout(() => { 
+            btnBuy.innerHTML = originalText;
+            btnBuy.style.backgroundColor = "var(--color-accent)";
+            btnBuy.style.color = "var(--color-onyx-deep)";
+        }, 1500);
+      });
+    }
+
     // Tabs Logic
     const tabBtns = document.querySelectorAll('.tab-btn');
     const tabContents = document.querySelectorAll('.tab-content');

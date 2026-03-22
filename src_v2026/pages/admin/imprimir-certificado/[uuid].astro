@@ -1,0 +1,328 @@
+---
+import { db } from '../../../db/client';
+import { certificates, artworks, collectors } from '../../../db/schema';
+import { eq } from 'drizzle-orm';
+import QRCode from 'qrcode';
+
+export const prerender = false; // Requiere SSR para leer la base de datos en vivo
+
+const { uuid } = Astro.params;
+
+if (!uuid) return Astro.redirect('/404');
+
+// Query Drizzle joining certificates + artworks + collectors
+const certData = await db.select({
+    cert: certificates,
+    art: artworks,
+    col: collectors
+}).from(certificates)
+  .where(eq(certificates.uuid, uuid))
+  .leftJoin(artworks, eq(certificates.artwork_id, artworks.id))
+  .leftJoin(collectors, eq(certificates.collector_id, collectors.id))
+  .limit(1);
+
+if (!certData || certData.length === 0) return Astro.redirect('/404');
+
+const record = certData[0];
+const validationUrl = `https://javiermix.ar/certificados/${uuid}`;
+
+// Generar código QR dinámico apuntando a la web de verificación pública
+const qrCodeDataUri = await QRCode.toDataURL(validationUrl, {
+    width: 220,
+    margin: 0,
+    color: { dark: '#0a0a0a', light: '#ffffff' }
+});
+
+const formatter = new Intl.DateTimeFormat('es-AR', { dateStyle: 'long' });
+const fechaEmision = record.cert.sale_date ? formatter.format(new Date(record.cert.sale_date)) : 'Fecha no registrada';
+---
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Imprimir Certificado | {record.art?.title}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --gold: #bd9b53;
+            --dark: #0f1115;
+            --paper: #fbfbf9;
+            --text-main: #2a2a2a;
+        }
+
+        @page {
+            size: A4 portrait;
+            margin: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #ccc; /* Para diferenciar del borde en pantalla */
+            display: flex;
+            justify-content: center;
+            font-family: 'Montserrat', sans-serif;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        .cartulina-a4 {
+            width: 210mm;
+            height: 297mm;
+            background-color: var(--paper);
+            box-sizing: border-box;
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            padding: 15mm;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+
+        /* Borde Interno Decorativo */
+        .marco-interno {
+            width: 100%;
+            height: 100%;
+            border: 2px solid var(--gold);
+            padding: 10mm;
+            box-sizing: border-box;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .marco-interno::before, .marco-interno::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--gold);
+        }
+        .marco-interno::before { top: 5px; left: 5px; border-right: none; border-bottom: none; }
+        .marco-interno::after { bottom: 5px; right: 5px; border-left: none; border-top: none; }
+
+        .header {
+            text-align: center;
+            margin-top: 15mm;
+            margin-bottom: 10mm;
+        }
+
+        .header-logo {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2.8rem;
+            font-style: italic;
+            color: var(--dark);
+            letter-spacing: 4px;
+            margin: 0;
+        }
+
+        .header-subtitle {
+            font-size: 0.8rem;
+            color: var(--gold);
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+
+        .main-title {
+            text-align: center;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 3.5rem;
+            color: var(--dark);
+            margin: 0 0 15mm 0;
+            line-height: 1;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15mm;
+            flex: 1;
+        }
+
+        .obra-cover-container {
+            width: 100%;
+            height: 100mm;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .obra-cover {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.15);
+            border: 1px solid #eaeaea;
+        }
+
+        .especificaciones {
+            display: flex;
+            flex-direction: column;
+            gap: 6mm;
+        }
+
+        .spec-item {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .spec-label {
+            font-size: 0.65rem;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 600;
+        }
+
+        .spec-value {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.5rem;
+            color: var(--text-main);
+            margin: 0;
+        }
+
+        .description-paragraph {
+            grid-column: span 2;
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.2rem;
+            text-align: justify;
+            color: #555;
+            line-height: 1.8;
+            margin: 10mm 15mm 0;
+        }
+
+        .footer-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            margin-top: auto;
+            align-items: end;
+            padding-bottom: 10mm;
+        }
+
+        .firma-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .linea-firma {
+            width: 60mm;
+            height: 1px;
+            background-color: var(--text-main);
+            margin-bottom: 5px;
+        }
+
+        .qr-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .qr-image {
+            width: 30mm;
+            height: 30mm;
+            mix-blend-mode: multiply;
+        }
+
+        .qr-caption {
+            font-size: 0.55rem;
+            color: #888;
+            letter-spacing: 1px;
+            margin-top: 3px;
+            text-transform: uppercase;
+        }
+
+        /* Ocultar elementos en la impresión */
+        .no-print {
+            padding: 20px;
+            text-align: center;
+            background: #2a2a2a;
+            color: white;
+            position: fixed;
+            top: 0;
+            width: 100%;
+            z-index: 100;
+        }
+
+        @media print {
+            body { background: white; }
+            .cartulina-a4 { box-shadow: none; border: none; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="no-print">
+        <h3>Vista Previa de Impresión A4</h3>
+        <p>Asegúrese de configurar su impresora sin márgenes y en tamaño A4.</p>
+        <button onclick="window.print()" style="padding: 10px 20px; background: #bd9b53; border: none; font-weight: bold; cursor: pointer; color: white;">IMPRIMIR AHORA</button>
+    </div>
+
+    <div class="cartulina-a4">
+        <div class="marco-interno">
+            
+            <div class="header">
+                <h1 class="header-logo">Javier Mix</h1>
+                <div class="header-subtitle">Fine Art Collection</div>
+            </div>
+
+            <h2 class="main-title">Certificado de Autenticidad</h2>
+
+            <div class="content-grid">
+                
+                <div class="obra-cover-container">
+                    {record.art?.filename && record.art?.serie_id ? (
+                        <img src={`/img/Series/${record.art.serie_id}/${record.art.filename}`} class="obra-cover" alt="Miniatura de la Obra" />
+                    ) : null}
+                </div>
+
+                <div class="especificaciones">
+                    <div class="spec-item">
+                        <span class="spec-label">Título de Obra</span>
+                        <h3 class="spec-value">{record.art?.title || 'Unknown Art'}</h3>
+                    </div>
+                    
+                    <div class="spec-item">
+                        <span class="spec-label">Coleccionista</span>
+                        <h3 class="spec-value">{record.col?.name || 'Venta Privada'}</h3>
+                    </div>
+
+                    <div class="spec-item">
+                        <span class="spec-label">Edición / Formato</span>
+                        <h3 class="spec-value">{record.cert.edition_number || 'Edición Única'} — {record.cert.dimensions}</h3>
+                    </div>
+
+                    <div class="spec-item">
+                        <span class="spec-label">Fecha de Emisión</span>
+                        <h3 class="spec-value">{fechaEmision}</h3>
+                    </div>
+                </div>
+
+                <p class="description-paragraph">
+                    El presente documento decreta formalmente que la obra fotográfica impresa identificada en los registros oficiales como "{record.art?.title}", adquirida por {record.col?.name}, es una copia genuina y auténtica producida en alta resolución bajo la supervisión estética directa de Javier Mix, preservando intacto los estándares Fine-Art y derechos de propiedad intelectual.
+                </p>
+                
+            </div>
+
+            <div class="footer-section">
+                <div class="firma-box">
+                    <div class="linea-firma"></div>
+                    <span class="spec-label">Firma del Autor</span>
+                    <span style="font-family: 'Cormorant Garamond', serif; font-size: 0.9rem;">Javier Mix</span>
+                </div>
+
+                <div class="qr-box">
+                    <img src={qrCodeDataUri} class="qr-image" alt="Código QR de Verificación" />
+                    <span class="qr-caption">ESCANEAR PARA VALIDAR CONTRATO</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>

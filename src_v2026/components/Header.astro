@@ -13,6 +13,10 @@ const { currentPath = '/', theme = 'dark' } = Astro.props;
 			<a href="/galeria" class={currentPath.startsWith('/galeria') ? 'active' : ''}>Colección</a>
 			<a href="/revista" class={currentPath.startsWith('/revista') ? 'active' : ''}>Revista</a>
 			<a href="/enmarcado" class={currentPath.startsWith('/enmarcado') ? 'active' : ''}>Studio Enmarcado</a>
+			<button id="nav-cart-btn" class="nav-cart-btn" aria-label="Ver Carrito">
+				<i class="fas fa-shopping-bag"></i>
+				<span id="cart-count-badge" class="cart-badge" style="display: none;">0</span>
+			</button>
 		</div>
 	</nav>
 </header>
@@ -82,6 +86,40 @@ const { currentPath = '/', theme = 'dark' } = Astro.props;
 .nav-links a:hover, 
 .nav-links a.active {
 	color: var(--color-white);
+}
+
+.nav-cart-btn {
+	background: transparent;
+	border: none;
+	color: var(--color-text-muted);
+	font-size: 1.1rem;
+	cursor: pointer;
+	position: relative;
+	transition: var(--transition-premium);
+	padding: 0;
+	display: flex;
+	align-items: center;
+}
+
+.nav-cart-btn:hover {
+	color: var(--color-accent);
+}
+
+.cart-badge {
+	position: absolute;
+	top: -6px;
+	right: -8px;
+	background-color: var(--color-accent);
+	color: var(--color-onyx-deep);
+	font-size: 0.6rem;
+	font-weight: 700;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	font-family: var(--font-secondary);
 }
 
 .nav-links a::after {
