@@ -64,17 +64,31 @@ if (id && fs.existsSync(seriesPath)) {
             } catch(e) {}
 
             for (let t of titlesToTry) {
-                const cleanTitle = t.toLowerCase().trim().replace(/\s+/g, '-');
+                const tLower = t.toLowerCase().trim();
+                const cleanTitle = tLower.replace(/\s+/g, '-');
                 const candidateId = `${folderSlug}-${cleanTitle}`;
+                
+                // Filename-based fallback
+                const fileSlug = f.split('.')[0].toLowerCase().replace(/_/g, '-');
 
                 // Try multiple match strategies
-                if (candidateId === id || candidateId === cleanId || candidateId.replace(/-(\d+)$/, '') === cleanId) {
+                if (
+                    candidateId === id || 
+                    candidateId === cleanId || 
+                    candidateId.replace(/-(\d+)$/, '') === cleanId ||
+                    id.includes(fileSlug) || // ULTIMATE FALLBACK: File name is part of the ID
+                    cleanId.includes(fileSlug)
+                ) {
+                    console.log(`[Astro Debug] MATCH FOUND: ${f} for ID: ${id}`);
                     // ENCONTRADO
                     const serieName = folder.replace(/_/g, ' ').toUpperCase();
                     const baseName = f.split('.')[0].toLowerCase();
                     const contextImages = allItems.filter(img => {
                         const fLow = img.toLowerCase();
-                        return fLow !== f.toLowerCase() && fLow.startsWith(baseName + '_') && /_(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
+                        // Support both _ and - for variants
+                        return fLow !== f.toLowerCase() && 
+                               (fLow.startsWith(baseName + '_') || fLow.startsWith(baseName + '-')) && 
+                               /(_|-)(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
                     });
 
                     let fiche = null;

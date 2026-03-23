@@ -43,7 +43,9 @@ for (const mainImg of mainImages) {
     const baseName = mainImg.split('.')[0].toLowerCase();
     const contextImages = otherImages.filter(f => {
         const fLow = f.toLowerCase();
-        return fLow.startsWith(baseName + '_') && /_(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
+        // Soporte para _ y - en variantes (ej: JHM_01_2 o JHM_01-2)
+        return (fLow.startsWith(baseName + '_') || fLow.startsWith(baseName + '-')) && 
+               /(_|-)(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
     });
     
     contextImages.forEach(img => matchedOtherImages.add(img));
