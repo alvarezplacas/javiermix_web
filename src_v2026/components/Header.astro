@@ -11,8 +11,11 @@ const { currentPath = '/', theme = 'dark' } = Astro.props;
 		<div class="nav-links">
 			<a href="/" class={currentPath === '/' ? 'active' : ''}>Inicio</a>
 			<a href="/galeria" class={currentPath.startsWith('/galeria') ? 'active' : ''}>Colección</a>
-			<a href="/revista" class={currentPath.startsWith('/revista') ? 'active' : ''}>Revista</a>
-			<a href="/enmarcado" class={currentPath.startsWith('/enmarcado') ? 'active' : ''}>Studio Enmarcado</a>
+ 			<a href="/revista" class={currentPath.startsWith('/revista') ? 'active' : ''}>Revista</a>
+ 			<a href="/enmarcado" class={currentPath.startsWith('/enmarcado') ? 'active' : ''}>Studio Enmarcado</a>
+            {currentPath.startsWith('/admin') && (
+                <a href="/admin/obras" class={currentPath.startsWith('/admin/obras') ? 'active' : ''}>Gestionar Obras</a>
+            )}
 			<button id="nav-cart-btn" class="nav-cart-btn" aria-label="Ver Carrito">
 				<i class="fas fa-shopping-bag"></i>
 				<span id="cart-count-badge" class="cart-badge" style="display: none;">0</span>
