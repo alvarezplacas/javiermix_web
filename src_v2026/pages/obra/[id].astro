@@ -29,7 +29,7 @@ if (id && fs.existsSync(seriesPath)) {
         // Scan main images
         const mainImages = allItems.filter(f => {
             const low = f.toLowerCase();
-            return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.(avif|jpg|jpeg|png)$/i.test(low);
+            return (low.startsWith('jmx_') || low.startsWith('jmix_') || low.startsWith('jhm_')) && !/_(\d+)\.(avif|jpg|jpeg|png)$/i.test(low);
         });
 
         // 1. Check DB first for all files in this series to find a title match

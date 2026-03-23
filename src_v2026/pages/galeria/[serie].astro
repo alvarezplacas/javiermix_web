@@ -27,7 +27,7 @@ const items = fs.readdirSync(folderPath).filter(f => /\.(avif|jpg|jpeg|png)$/i.t
 // Lógica mejorada con Regex para emparejar
 const mainImages = items.filter(f => {
     const low = f.toLowerCase();
-    return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.(avif|jpg|jpeg|png)$/i.test(low);
+    return (low.startsWith('jmx_') || low.startsWith('jmix_') || low.startsWith('jhm_')) && !/_(\d+)\.(avif|jpg|jpeg|png)$/i.test(low);
 });
 const otherImages = items.filter(f => !mainImages.includes(f));
 
