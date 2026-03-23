@@ -20,11 +20,11 @@ export async function getStaticPaths() {
 
 		for (const folder of folders) {
 			const folderPath = path.join(seriesPath, folder);
-			const items = fs.readdirSync(folderPath).filter(f => f.endsWith('.avif') || f.endsWith('.jpg') || f.endsWith('.png'));
+			const items = fs.readdirSync(folderPath).filter(f => /\.(avif|jpg|jpeg|png)$/i.test(f));
 			
 			const mainImages = items.filter(f => {
 				const low = f.toLowerCase();
-				return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.avif$/.test(low);
+				return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.(avif|jpg|jpeg|png)$/i.test(low);
 			});
 			const otherImages = items.filter(f => !mainImages.includes(f));
 			
@@ -36,7 +36,7 @@ export async function getStaticPaths() {
 				const baseName = mainImg.split('.')[0].toLowerCase();
 				const contextImages = otherImages.filter(f => {
 					const fLow = f.toLowerCase();
-					return fLow.startsWith(baseName + '_') && /_(\d+)\.avif$/.test(fLow);
+					return fLow.startsWith(baseName + '_') && /_(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
 				});
 				
 				contextImages.forEach(img => matchedOtherImages.add(img));
