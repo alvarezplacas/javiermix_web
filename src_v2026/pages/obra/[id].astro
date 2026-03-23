@@ -15,8 +15,13 @@ const { id } = Astro.params;
 const seriesPath = path.join(process.cwd(), 'public', 'img', 'Series');
 let artworkData = null;
 
+console.log(`[Astro Debug] process.cwd: ${process.cwd()}`);
+console.log(`[Astro Debug] seriesPath: ${seriesPath}`);
+console.log(`[Astro Debug] seriesPath exists: ${fs.existsSync(seriesPath)}`);
+
 if (id && fs.existsSync(seriesPath)) {
     const folders = fs.readdirSync(seriesPath).filter(file => fs.statSync(path.join(seriesPath, file)).isDirectory());
+    console.log(`[Astro Debug] Found folders: ${folders.length}`);
     const metadataMap = loadArtworkMetadata();
 
     // Clean the ID for lookup (strip -2, -3 suffixes that might come from EXIF titles)
