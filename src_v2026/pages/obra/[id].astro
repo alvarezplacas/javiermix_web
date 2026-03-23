@@ -1,7 +1,7 @@
 ---
 import { db } from '../../db/client';
 import { artworks } from '../../db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadArtworkMetadata } from '../../utils/metadata.js';
@@ -26,93 +26,104 @@ if (id && fs.existsSync(seriesPath)) {
         const folderPath = path.join(seriesPath, folder);
         const allItems = fs.readdirSync(folderPath).filter(f => /\.(avif|jpg|jpeg|png)$/i.test(f));
         
-        // Solo escanear imágenes principales (no variantes _2, _3, etc.)
+        // Scan main images
         const mainImages = allItems.filter(f => {
             const low = f.toLowerCase();
             return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.(avif|jpg|jpeg|png)$/i.test(low);
         });
-        
+
+        // 1. Check DB first for all files in this series to find a title match
+        const dbSeriesArtworks = mainImages.length > 0 
+            ? await db.select().from(artworks).where(inArray(artworks.filename, mainImages))
+            : [];
+        const dbMap = new Map(dbSeriesArtworks.map(r => [r.filename, r]));
+
         for (const f of mainImages) {
-            const meta = metadataMap.get(f);
+            const dbMeta = dbMap.get(f);
+            const csvMeta = metadataMap.get(f);
             
-            // Reconstruir el ID: usar nombre de archivo como título base
-            let titleText = meta?.title || f.split('.')[0].replace(/_/g, ' ');
+            // Potential titles for this file
+            let titlesToTry = new Set();
+            if (dbMeta?.title) titlesToTry.add(dbMeta.title);
+            if (csvMeta?.title) titlesToTry.add(csvMeta.title);
+            titlesToTry.add(f.split('.')[0].replace(/_/g, ' '));
+            
+            // Try EXIF titles too
             try {
                 const tags = await ExifReader.load(path.join(folderPath, f));
-                if (tags['Headline']?.description) titleText = tags['Headline'].description;
-                else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
-                else if (tags['Title']?.description) titleText = tags['Title'].description;
+                if (tags['Headline']?.description) titlesToTry.add(tags['Headline'].description);
+                if (tags['ObjectName']?.description) titlesToTry.add(tags['ObjectName'].description);
+                if (tags['Title']?.description) titlesToTry.add(tags['Title'].description);
             } catch(e) {}
 
-            const cleanTitle = titleText.toLowerCase().replace(/ /g, '-');
-            const candidateId = `${folderSlug}-${cleanTitle}`;
+            for (let t of titlesToTry) {
+                const cleanTitle = t.toLowerCase().trim().replace(/\s+/g, '-');
+                const candidateId = `${folderSlug}-${cleanTitle}`;
 
-            if (candidateId === id) {
-                // ENCONTRADO - cargar información completa
-                const dbMeta = await db.select().from(artworks).where(eq(artworks.filename, f)).then(res => res[0]);
-                const serieName = folder.replace(/_/g, ' ').toUpperCase();
-                
-                // Imágenes de contexto (ambiente/hover)
-                const baseName = f.split('.')[0].toLowerCase();
-                const contextImages = allItems.filter(img => {
-                    const fLow = img.toLowerCase();
-                    return fLow !== f.toLowerCase() && fLow.startsWith(baseName + '_') && /_(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
-                });
+                if (candidateId === id) {
+                    // ENCONTRADO
+                    const serieName = folder.replace(/_/g, ' ').toUpperCase();
+                    const baseName = f.split('.')[0].toLowerCase();
+                    const contextImages = allItems.filter(img => {
+                        const fLow = img.toLowerCase();
+                        return fLow !== f.toLowerCase() && fLow.startsWith(baseName + '_') && /_(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
+                    });
 
-                let fiche = null;
-                if (dbMeta) {
-                    fiche = {
-                        story: dbMeta.description || '',
-                        camera: dbMeta.camera || '',
-                        lens: dbMeta.lens || '',
-                        year: dbMeta.date || '',
-                        author: 'Javier Mix'
+                    let fiche = null;
+                    if (dbMeta) {
+                        fiche = {
+                            story: dbMeta.description || '',
+                            camera: dbMeta.camera || '',
+                            lens: dbMeta.lens || '',
+                            year: dbMeta.date || '',
+                            author: 'Javier Mix'
+                        };
+                    } else {
+                        try {
+                            const tags = await ExifReader.load(path.join(folderPath, f));
+                            const description = tags['Caption/Abstract']?.description || tags['Description']?.description;
+                            const creator = tags['By-line']?.description || tags['Creator']?.description || 'Javier Mix';
+                            if (description || tags['Model']?.description) {
+                                fiche = {
+                                    story: description || '',
+                                    camera: tags['Model']?.description || '',
+                                    lens: tags['LensModel']?.description || '',
+                                    iso: tags['ISOSpeedRatings']?.description || tags['ISO']?.value?.toString() || '',
+                                    shutterspeed: tags['ExposureTime']?.description || '',
+                                    aperture: tags['FNumber']?.description ? `f/${tags['FNumber'].description}` : '',
+                                    year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) || '' : '',
+                                    location: tags['City']?.description || '',
+                                    author: creator
+                                };
+                            }
+                        } catch(e) {}
+                    }
+
+                    const sizes = [];
+                    if (dbMeta) {
+                        if (dbMeta.precio_small) sizes.push({ label: 'Small', dimensions: '20 x 30 cm', price: dbMeta.precio_small });
+                        if (dbMeta.precio_medium) sizes.push({ label: 'Medium', dimensions: '40 x 60 cm', price: dbMeta.precio_medium });
+                        if (dbMeta.precio_large) sizes.push({ label: 'Large', dimensions: '60 x 90 cm', price: dbMeta.precio_large });
+                    } else if (csvMeta) {
+                        if (csvMeta.precio_small) sizes.push({ label: 'Small', dimensions: csvMeta.size_small || '20 x 30 cm', price: csvMeta.precio_small });
+                        if (csvMeta.precio_medium) sizes.push({ label: 'Medium', dimensions: csvMeta.size_medium || '40 x 60 cm', price: csvMeta.precio_medium });
+                        if (csvMeta.precio_large) sizes.push({ label: 'Large', dimensions: csvMeta.size_large || '60 x 90 cm', price: csvMeta.precio_large });
+                    }
+
+                    artworkData = {
+                        title: dbMeta?.title || t,
+                        serieName,
+                        coverImage: `/img/Series/${folder}/${f}`,
+                        roomImage: contextImages.length > 0 ? `/img/Series/${folder}/${contextImages[0]}` : null,
+                        contextImages: contextImages.map(img => `/img/Series/${folder}/${img}`),
+                        precio: sizes.length > 0 ? sizes[0].price : 250,
+                        etiqueta: "Fine Art Print",
+                        meta: csvMeta || null,
+                        fiche,
+                        sizes
                     };
-                } else {
-                    try {
-                        const tags = await ExifReader.load(path.join(folderPath, f));
-                        const description = tags['Caption/Abstract']?.description || tags['Description']?.description;
-                        const creator = tags['By-line']?.description || tags['Creator']?.description || 'Javier Mix';
-                        if (description || tags['Model']?.description) {
-                            fiche = {
-                                story: description || '',
-                                camera: tags['Model']?.description || '',
-                                lens: tags['LensModel']?.description || '',
-                                iso: tags['ISOSpeedRatings']?.description || tags['ISO']?.value?.toString() || '',
-                                shutterspeed: tags['ExposureTime']?.description || '',
-                                aperture: tags['FNumber']?.description ? `f/${tags['FNumber'].description}` : '',
-                                year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) || '' : '',
-                                location: tags['City']?.description || '',
-                                author: creator
-                            };
-                        }
-                    } catch(e) {}
+                    break find_artwork;
                 }
-
-                const sizes = [];
-                if (dbMeta) {
-                    if (dbMeta.precio_small) sizes.push({ label: 'Small', dimensions: '20 x 30 cm', price: dbMeta.precio_small });
-                    if (dbMeta.precio_medium) sizes.push({ label: 'Medium', dimensions: '40 x 60 cm', price: dbMeta.precio_medium });
-                    if (dbMeta.precio_large) sizes.push({ label: 'Large', dimensions: '60 x 90 cm', price: dbMeta.precio_large });
-                } else if (meta) {
-                    if (meta.precio_small) sizes.push({ label: 'Small', dimensions: meta.size_small || '20 x 30 cm', price: meta.precio_small });
-                    if (meta.precio_medium) sizes.push({ label: 'Medium', dimensions: meta.size_medium || '40 x 60 cm', price: meta.precio_medium });
-                    if (meta.precio_large) sizes.push({ label: 'Large', dimensions: meta.size_large || '60 x 90 cm', price: meta.precio_large });
-                }
-
-                artworkData = {
-                    title: titleText,
-                    serieName,
-                    coverImage: `/img/Series/${folder}/${f}`,
-                    roomImage: contextImages.length > 0 ? `/img/Series/${folder}/${contextImages[0]}` : null,
-                    contextImages: contextImages.map(img => `/img/Series/${folder}/${img}`),
-                    precio: sizes.length > 0 ? sizes[0].price : 250,
-                    etiqueta: "Fine Art Print",
-                    meta: meta || null,
-                    fiche,
-                    sizes
-                };
-                break find_artwork;
             }
         }
     }
@@ -241,24 +252,7 @@ const waLink = `https://wa.me/${whatsappNumber}?text=Hola,%20estoy%20interesado%
         
         <div class="tab-content" id="tab-terminos" style="display: none;">
           <div class="legal-content">
-            <h2 class="legal-title">Términos y Condiciones de Venta | Javier Mix Fine Art</h2>
-            <p>Al adquirir una obra de la serie <strong>"Cartografía de la Rebeldía"</strong> o cualquier pieza del catálogo de <strong>javiermix.ar</strong>, el comprador acepta los siguientes términos:</p>
-            
-            <div class="legal-section">
-              <h3>1. Naturaleza del Producto</h3>
-              <p>Cada fotografía es una impresión de alta calidad (Fine Art) realizada bajo estándares profesionales para garantizar su longevidad y fidelidad cromática. El valor expresado en el catálogo corresponde exclusivamente a la pieza impresa en el formato seleccionado (Estándar, Mediano o Grande).</p>
-            </div>
-            
-            <div class="legal-section">
-              <h3>2. Exclusiones Importantes</h3>
-              <p><strong>Enmarcado:</strong> El precio de venta no incluye marco, paspartú, ni ningún tipo de montaje o estructura de exhibición por el momento. La obra se entrega como una lámina impresa lista para ser enmarcada a gusto del comprador.</p>
-              <p><strong>Envío:</strong> El costo de envío no está incluido en el valor de la obra. Los gastos de logística, embalaje especial para obras de arte y transporte correrán por cuenta del comprador y serán coordinados de forma privada tras la compra.</p>
-            </div>
-            
-            <div class="legal-section">
-              <h3>3. Autenticidad y Derechos</h3>
-              <p>Todas las obras se entregan firmadas por el autor bajo el nombre artístico <strong>Javier Mix</strong>. La compra de la impresión física no transfiere derechos de reproducción comercial sobre la imagen, los cuales permanecen como propiedad intelectual del autor.</p>
-            </div>
+            <p>Información detallada sobre el proceso de adquisición, envíos y autenticidad disponible en la sección de <strong>Condiciones de Venta</strong> más abajo.</p>
           </div>
         </div>
         
@@ -321,8 +315,29 @@ const waLink = `https://wa.me/${whatsappNumber}?text=Hola,%20estoy%20interesado%
                 </button>
              </div>
           </div>
+        <!-- Se hace la venta: Persistente y visible -->
+        <div class="sales-info-card">
+          <h3 class="sales-card-title"><i class="fas fa-handshake"></i> CONDICIONES DE VENTA / JHM</h3>
+          <div class="sales-card-grid">
+             <div class="sales-item">
+                <span class="sales-label">EL PRODUCTO</span>
+                <p>Impresión Fine Art de alta gama. Pigmentos minerales (+100 años). Papel Algodón o Canvas Pro.</p>
+             </div>
+             <div class="sales-item">
+                <span class="sales-label">ENMARCADO</span>
+                <p>La obra se entrega como lámina. No incluye marco (coordinar por Studio Enmarcado).</p>
+             </div>
+             <div class="sales-item">
+                <span class="sales-label">ENVÍO</span>
+                <p>No incluido. Se coordina de forma privada post-compra para asegurar integridad de la obra.</p>
+             </div>
+             <div class="sales-item">
+                <span class="sales-label">AUTENTICIDAD</span>
+                <p>Todas las piezas se entregan firmadas (Javier Mix pinxit) y con Certificado de Autenticidad.</p>
+             </div>
+          </div>
         </div>
-        
+
       </section>
 
     </div>
@@ -927,7 +942,69 @@ const waLink = `https://wa.me/${whatsappNumber}?text=Hola,%20estoy%20interesado%
   padding-bottom: 0.25rem;
 }
 
-.tab-content {
+/* Sales Info Card - 2026 Premium */
+.sales-info-card {
+  margin-top: 4rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(220, 177, 74, 0.15);
+  padding: 2.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.sales-info-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.sales-card-title {
+  font-family: var(--font-primary);
+  font-size: 0.85rem;
+  letter-spacing: 3px;
+  color: var(--color-accent);
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.sales-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+}
+
+.sales-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sales-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-travertine-light);
+  letter-spacing: 1.5px;
+  opacity: 0.9;
+}
+
+.sales-item p {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .sales-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
   min-height: 400px; /* Rigid stability */
   position: relative;
 }

@@ -158,7 +158,7 @@ const coverOg = artworks[0]?.mainUrl || undefined;
 
 		<section class="masonry-grid">
 			{artworks.map((artwork, index) => (
-				<a href={`/obra/${serie.replace(/_/g, '-').toLowerCase()}-${artwork.title.toLowerCase().replace(/ /g, '-')}`} class="gallery-artwork-card" tabindex="0">
+				<a href={`/obra/${serie.toLowerCase().replace(/_/g, '-')}-${artwork.title.toLowerCase().trim().replace(/\s+/g, '-')}`} class="gallery-artwork-card" tabindex="0">
 					<div class="artwork-figure">
 						<!-- Imagen Principal JMX -->
 						<img src={artwork.mainUrl} alt={`Obra ${name} - ${artwork.title}`} class="artwork-img main-img" loading="lazy" />
