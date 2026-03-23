@@ -11,7 +11,7 @@ import { loadArtworkMetadata } from '../../utils/metadata.js';
 import ExifReader from 'exifreader';
 import FramingStudio from '../../components/FramingStudio.astro';
 
-export const prerender = true;
+export const prerender = false;
 
 export async function getStaticPaths() {
 	const seriesPath = path.join(process.cwd(), 'public', 'img', 'Series');

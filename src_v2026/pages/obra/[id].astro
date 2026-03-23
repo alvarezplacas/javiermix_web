@@ -8,47 +8,53 @@ import { loadArtworkMetadata } from '../../utils/metadata.js';
 import ExifReader from 'exifreader';
 import FramingStudio from '../../components/FramingStudio.astro';
 
-export const prerender = true;
+export const prerender = false;
 
-export async function getStaticPaths() {
-	const seriesPath = path.join(process.cwd(), 'public', 'img', 'Series');
-	let paths = [];
+const { id } = Astro.params;
 
-	if (fs.existsSync(seriesPath)) {
-		const folders = fs.readdirSync(seriesPath).filter(file => fs.statSync(path.join(seriesPath, file)).isDirectory());
-		
-		const metadataMap = loadArtworkMetadata();
+const seriesPath = path.join(process.cwd(), 'public', 'img', 'Series');
+let artworkData = null;
 
-		for (const folder of folders) {
-			const folderPath = path.join(seriesPath, folder);
-			const items = fs.readdirSync(folderPath).filter(f => /\.(avif|jpg|jpeg|png)$/i.test(f));
-			
-			const mainImages = items.filter(f => {
-				const low = f.toLowerCase();
-				return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.(avif|jpg|jpeg|png)$/i.test(low);
-			});
-			const otherImages = items.filter(f => !mainImages.includes(f));
-			
-			let matchedOtherImages = new Set();
-			const folderSlug = folder.replace(/_/g, '-').toLowerCase();
-            const serieName = folder.replace(/_/g, ' ').toUpperCase();
-			
-			for (const mainImg of mainImages) {
-				const baseName = mainImg.split('.')[0].toLowerCase();
-				const contextImages = otherImages.filter(f => {
-					const fLow = f.toLowerCase();
-					return fLow.startsWith(baseName + '_') && /_(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
-				});
-				
-				contextImages.forEach(img => matchedOtherImages.add(img));
+if (id && fs.existsSync(seriesPath)) {
+    const folders = fs.readdirSync(seriesPath).filter(file => fs.statSync(path.join(seriesPath, file)).isDirectory());
+    const metadataMap = loadArtworkMetadata();
 
-				const dbMeta = await db.select().from(artworks).where(eq(artworks.filename, mainImg)).then(res => res[0]);
-				const csvMeta = metadataMap.get(mainImg);
-				
-				let titleText = dbMeta?.title || csvMeta?.title || mainImg.split('.')[0].replace(/_/g, ' ');
-				let fiche = null;
+    find_artwork: for (const folder of folders) {
+        const folderSlug = folder.replace(/_/g, '-').toLowerCase();
+        if (!id.startsWith(folderSlug + '-')) continue;
 
-				if (dbMeta) {
+        const folderPath = path.join(seriesPath, folder);
+        const items = fs.readdirSync(folderPath).filter(f => /\.(avif|jpg|jpeg|png)$/i.test(f));
+        
+        for (const f of items) {
+            const meta = metadataMap.get(f);
+            const lowName = f.split('.')[0].replace(/_/g, '-').toLowerCase();
+            
+            // Reconstruir el ID para comparar
+            let titleText = meta?.title || f.split('.')[0];
+            try {
+                const tags = await ExifReader.load(path.join(folderPath, f));
+                if (tags['Title']?.description) titleText = tags['Title'].description;
+                else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
+            } catch(e) {}
+
+            const cleanTitle = titleText.toLowerCase().replace(/ /g, '-');
+            const candidateId = `${folderSlug}-${cleanTitle}`;
+
+            if (candidateId === id) {
+                // ENCONTRADO
+                const dbMeta = await db.select().from(artworks).where(eq(artworks.filename, f)).then(res => res[0]);
+                const serieName = folder.replace(/_/g, ' ').toUpperCase();
+                
+                // Imágenes de contexto
+                const baseName = f.split('.')[0].toLowerCase();
+                const contextImages = items.filter(img => {
+                    const fLow = img.toLowerCase();
+                    return fLow !== f.toLowerCase() && fLow.startsWith(baseName + '_') && /_(\d+)\.(avif|jpg|jpeg|png)$/i.test(fLow);
+                });
+
+                let fiche = null;
+                if (dbMeta) {
                     fiche = {
                         story: dbMeta.description || '',
                         camera: dbMeta.camera || '',
@@ -56,123 +62,61 @@ export async function getStaticPaths() {
                         year: dbMeta.date || '',
                         author: 'Javier Mix'
                     };
+                } else {
+                    try {
+                        const tags = await ExifReader.load(path.join(folderPath, f));
+                        const description = tags['Caption/Abstract']?.description || tags['Description']?.description;
+                        const creator = tags['By-line']?.description || tags['Creator']?.description || 'Javier Mix';
+                        if (description || tags['Model']?.description) {
+                            fiche = {
+                                story: description || '',
+                                camera: tags['Model']?.description || '',
+                                lens: tags['LensModel']?.description || '',
+                                iso: tags['ISOSpeedRatings']?.description || tags['ISO']?.value?.toString() || '',
+                                shutterspeed: tags['ExposureTime']?.description || '',
+                                aperture: tags['FNumber']?.description ? `f/${tags['FNumber'].description}` : '',
+                                year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) || '' : '',
+                                location: tags['City']?.description || '',
+                                author: creator
+                            };
+                        }
+                    } catch(e) {}
                 }
 
-				try {
-					const metaPath = path.join(folderPath, mainImg);
-					const tags = await ExifReader.load(metaPath);
-					
-					if (!dbMeta) {
-						if (tags['Headline']?.description) titleText = tags['Headline'].description;
-						else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
-						else if (tags['Title']?.description) titleText = tags['Title'].description;
-						
-						const description = tags['Caption/Abstract']?.description || tags['Description']?.description;
-						const creator = tags['By-line']?.description || tags['Creator']?.description || 'Javier Mix';
-						
-						fiche = {
-							story: description || '',
-							camera: tags['Model']?.description || '',
-							lens: tags['LensModel']?.description || '',
-							iso: tags['ISOSpeedRatings']?.description || tags['ISO']?.value?.toString() || '',
-							shutterspeed: tags['ExposureTime']?.description || '',
-							aperture: tags['FNumber']?.description ? `f/${tags['FNumber'].description}` : '',
-							year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) || '' : '',
-							location: tags['City']?.description || '',
-							author: creator
-						};
-					}
-				} catch(e) {}
-
-                const cleanTitle = titleText.toLowerCase().replace(/ /g, '-');
-                const uniqueId = `${folderSlug}-${cleanTitle}`;
-
-				// Build sizes array from CSV pricing columns
                 const sizes = [];
-                if (meta?.size_small && meta?.precio_small) {
-                    sizes.push({ label: 'Small', dimensions: meta.size_small, price: meta.precio_small });
-                }
-                if (meta?.size_medium && meta?.precio_medium) {
-                    sizes.push({ label: 'Medium', dimensions: meta.size_medium, price: meta.precio_medium });
-                }
-                if (meta?.size_large && meta?.precio_large) {
-                    sizes.push({ label: 'Large', dimensions: meta.size_large, price: meta.precio_large });
-                }
-
-				paths.push({
-                    params: { id: uniqueId },
-                    props: { 
-                        title: titleText, 
-                        serieName: serieName,
-                        coverImage: `/img/Series/${folder}/${mainImg}`,
-                        roomImage: contextImages.length > 0 ? `/img/Series/${folder}/${contextImages[0]}` : null,
-                        contextImages: contextImages.map(img => `/img/Series/${folder}/${img}`),
-                        precio: sizes.length > 0 ? sizes[0].price : 250,
-                        etiqueta: "Fine Art Print",
-                        meta: meta || null,
-                        fiche: fiche,
-                        sizes: sizes
-                    }
-                });
-			}
-			
-			const standalone = otherImages.filter(f => !matchedOtherImages.has(f));
-			for (const img of standalone) {
-                const meta = metadataMap.get(img);
-                let titleText = meta?.title || img.split('.')[0];
-                let fiche = meta?.fiche || null;
-                
-                try {
-                    const metaPath = path.join(folderPath, img);
-                    const tags = await ExifReader.load(metaPath);
-                    if (tags['Title']?.description) titleText = tags['Title'].description;
-                    else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
-                    
-                    const description = tags['Description']?.description || tags['Caption/Abstract']?.description;
-                    if (description || tags['Model']?.description) {
-                        fiche = {
-                            story: description || '',
-                            camera: tags['Model']?.description || '',
-                            lens: tags['LensModel']?.description || '',
-                            year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) : ''
-                        };
-                    }
-                } catch(e) {}
-
-                const cleanTitle = titleText.toLowerCase().replace(/ /g, '-');
-                const uniqueId = `${folderSlug}-${cleanTitle}`;
-
-				// Build sizes array from CSV pricing columns
-                const standaloneSizes = [];
-                if (meta?.size_small && meta?.precio_small) {
-                    standaloneSizes.push({ label: 'Small', dimensions: meta.size_small, price: meta.precio_small });
-                }
-                if (meta?.size_medium && meta?.precio_medium) {
-                    standaloneSizes.push({ label: 'Medium', dimensions: meta.size_medium, price: meta.precio_medium });
-                }
-                if (meta?.size_large && meta?.precio_large) {
-                    standaloneSizes.push({ label: 'Large', dimensions: meta.size_large, price: meta.precio_large });
+                if (dbMeta) {
+                    if (dbMeta.precio_small) sizes.push({ label: 'Small', dimensions: '20 x 30 cm', price: dbMeta.precio_small });
+                    if (dbMeta.precio_medium) sizes.push({ label: 'Medium', dimensions: '40 x 60 cm', price: dbMeta.precio_medium });
+                    if (dbMeta.precio_large) sizes.push({ label: 'Large', dimensions: '60 x 90 cm', price: dbMeta.precio_large });
+                } else if (meta) {
+                    if (meta.precio_small) sizes.push({ label: 'Small', dimensions: meta.size_small || '20 x 30 cm', price: meta.precio_small });
+                    if (meta.precio_medium) sizes.push({ label: 'Medium', dimensions: meta.size_medium || '40 x 60 cm', price: meta.precio_medium });
+                    if (meta.precio_large) sizes.push({ label: 'Large', dimensions: meta.size_large || '60 x 90 cm', price: meta.precio_large });
                 }
 
-				paths.push({
-                    params: { id: uniqueId },
-                    props: { 
-                        title: titleText, 
-                        serieName: serieName,
-                        coverImage: `/img/Series/${folder}/${img}`,
-                        roomImage: null,
-                        precio: standaloneSizes.length > 0 ? standaloneSizes[0].price : 250,
-                        etiqueta: "Fine Art Print",
-                        meta: meta || null,
-                        fiche: fiche,
-                        sizes: standaloneSizes
-                    }
-                });
-			}
-		}
-	}
-	return paths;
+                artworkData = {
+                    title: titleText,
+                    serieName,
+                    coverImage: `/img/Series/${folder}/${f}`,
+                    roomImage: contextImages.length > 0 ? `/img/Series/${folder}/${contextImages[0]}` : null,
+                    contextImages: contextImages.map(img => `/img/Series/${folder}/${img}`),
+                    precio: sizes.length > 0 ? sizes[0].price : 250,
+                    etiqueta: "Fine Art Print",
+                    meta: meta || null,
+                    fiche,
+                    sizes
+                };
+                break find_artwork;
+            }
+        }
+    }
 }
+
+if (!artworkData) {
+    return Astro.redirect('/galeria');
+}
+
+const { title, serieName, coverImage, roomImage, precio, etiqueta, meta, fiche, sizes = [] } = artworkData;
 
 const { title, serieName, coverImage, roomImage, precio, etiqueta, meta, fiche, sizes = [] } = Astro.props;
 
