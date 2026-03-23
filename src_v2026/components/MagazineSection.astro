@@ -26,6 +26,9 @@ if (fetchedArticles.length > 0) {
     link: `/revista/${a.slug}`,
     location: a.location || 'Estudio Javier Mix'
   }));
+  
+  // Si hay menos de 3, podrida mostrar placeholders o dejar solo las reales.
+  // El usuario dice "deberia aparecer aca", así que mostraremos solo las reales si hay al menos una.
 } else {
   // Demo / Placeholder aesthetic articles so the site doesn't look empty before first upload
   displayArticles = [

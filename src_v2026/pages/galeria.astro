@@ -22,32 +22,26 @@ try {
       
       const mainImages = items.filter(f => {
           const low = f.toLowerCase();
-          return low.startsWith('jmx_') || low.startsWith('jmix_');
+          // Solo los que NO tienen guion bajo seguido de número al final (ej: JMX_9742.avif)
+          return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.avif$/.test(low);
       });
       const otherImages = items.filter(f => {
           const low = f.toLowerCase();
-          return !low.startsWith('jmx_') && !low.startsWith('jmix_');
+          // Los que SÍ tienen guion bajo seguido de número (ej: JMX_9742_2.avif) u otros nombres
+          return !mainImages.includes(f);
       });
       
       let matchedOtherImages = new Set();
       mainImages.forEach(mainImg => {
-          const mainNumMatch = mainImg.match(/\d+/);
-          const mainNum = mainNumMatch ? mainNumMatch[0] : null;
+          const baseName = mainImg.split('.')[0].toLowerCase();
           
-          let roomImgMatch = null;
-          if (mainNum) {
-              roomImgMatch = otherImages.find(f => {
-                  const fMatch = f.match(/\d+/);
-                  return fMatch && fMatch[0] === mainNum;
-              });
-          }
-          if (!roomImgMatch) {
-              let baseName = mainImg.toLowerCase();
-              if (baseName.startsWith('jmx_')) baseName = baseName.substring(4);
-              else if (baseName.startsWith('jmix_')) baseName = baseName.substring(5);
-              roomImgMatch = otherImages.find(f => f.toLowerCase() === baseName);
-          }
-          if (roomImgMatch) matchedOtherImages.add(roomImgMatch);
+          // Buscamos JMX_XXXX_2.avif, JMX_XXXX_3.avif, etc.
+          const contextImages = otherImages.filter(f => {
+              const fLow = f.toLowerCase();
+              return fLow.startsWith(baseName + '_') && /_(\d+)\.avif$/.test(fLow);
+          });
+          
+          contextImages.forEach(img => matchedOtherImages.add(img));
       });
       
       const standalone = otherImages.filter(f => !matchedOtherImages.has(f));

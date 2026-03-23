@@ -24,48 +24,38 @@ export async function getStaticPaths() {
 			
 			const mainImages = items.filter(f => {
 				const low = f.toLowerCase();
-				return low.startsWith('jmx_') || low.startsWith('jmix_');
+				return (low.startsWith('jmx_') || low.startsWith('jmix_')) && !/_(\d+)\.avif$/.test(low);
 			});
-			const otherImages = items.filter(f => {
-				const low = f.toLowerCase();
-				return !low.startsWith('jmx_') && !low.startsWith('jmix_');
-			});
+			const otherImages = items.filter(f => !mainImages.includes(f));
 			
 			let matchedOtherImages = new Set();
-			const folderSlug = folder.split('_').map(word => word.toUpperCase()).join(' ').toLowerCase().replace(/ /g, '-');
-            const serieName = folder.split('_').map(word => word.toUpperCase()).join(' ');
+			const folderSlug = folder.replace(/_/g, '-').toLowerCase();
+            const serieName = folder.replace(/_/g, ' ').toUpperCase();
 			
 			for (const mainImg of mainImages) {
-				const mainNumMatch = mainImg.match(/\d+/);
-				const mainNum = mainNumMatch ? mainNumMatch[0] : null;
-				let roomImgMatch = null;
+				const baseName = mainImg.split('.')[0].toLowerCase();
+				const contextImages = otherImages.filter(f => {
+					const fLow = f.toLowerCase();
+					return fLow.startsWith(baseName + '_') && /_(\d+)\.avif$/.test(fLow);
+				});
 				
-				if (mainNum) {
-					roomImgMatch = otherImages.find(f => {
-						const fNumMatch = f.match(/\d+/);
-						return fNumMatch && fNumMatch[0] === mainNum;
-					});
-				}
-				if (!roomImgMatch) {
-					let baseName = mainImg.toLowerCase();
-					if (baseName.startsWith('jmx_')) baseName = baseName.substring(4);
-					else if (baseName.startsWith('jmix_')) baseName = baseName.substring(5);
-					roomImgMatch = otherImages.find(f => f.toLowerCase() === baseName);
-				}
-				
-				if (roomImgMatch) matchedOtherImages.add(roomImgMatch);
+				contextImages.forEach(img => matchedOtherImages.add(img));
 				
                 const meta = metadataMap.get(mainImg);
-                let titleText = meta?.title || (mainNum ? mainNum : mainImg.split('.')[0]);
+                let titleText = meta?.title || mainImg.split('.')[0].replace(/_/g, ' ');
                 let fiche = meta?.fiche || null;
                 
                 try {
                     const metaPath = path.join(folderPath, mainImg);
                     const tags = await ExifReader.load(metaPath);
-                    if (tags['Title']?.description) titleText = tags['Title'].description;
-                    else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
                     
-                    const description = tags['Description']?.description || tags['Caption/Abstract']?.description;
+                    if (tags['Headline']?.description) titleText = tags['Headline'].description;
+                    else if (tags['ObjectName']?.description) titleText = tags['ObjectName'].description;
+                    else if (tags['Title']?.description) titleText = tags['Title'].description;
+                    
+                    const description = tags['Caption/Abstract']?.description || tags['Description']?.description;
+                    const creator = tags['By-line']?.description || tags['Creator']?.description || 'Javier Mix';
+                    
                     if (description || tags['Model']?.description) {
                         fiche = {
                             story: description || '',
@@ -75,7 +65,8 @@ export async function getStaticPaths() {
                             shutterspeed: tags['ExposureTime']?.description || '',
                             aperture: tags['FNumber']?.description ? `f/${tags['FNumber'].description}` : '',
                             year: tags['DateCreated']?.description ? tags['DateCreated'].description.substring(0,4) : '',
-                            location: tags['City']?.description || ''
+                            location: tags['City']?.description || '',
+                            author: creator
                         };
                     }
                 } catch(e) {}
@@ -101,7 +92,8 @@ export async function getStaticPaths() {
                         title: titleText, 
                         serieName: serieName,
                         coverImage: `/img/Series/${folder}/${mainImg}`,
-                        roomImage: roomImgMatch ? `/img/Series/${folder}/${roomImgMatch}` : null,
+                        roomImage: contextImages.length > 0 ? `/img/Series/${folder}/${contextImages[0]}` : null,
+                        contextImages: contextImages.map(img => `/img/Series/${folder}/${img}`),
                         precio: sizes.length > 0 ? sizes[0].price : 250,
                         etiqueta: "Fine Art Print",
                         meta: meta || null,

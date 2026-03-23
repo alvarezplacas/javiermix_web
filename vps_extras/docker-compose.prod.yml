@@ -23,6 +23,9 @@ services:
     restart: always
     environment:
       DATABASE_URL: mysql://root:root@db:3306/javiermix_obras
+    volumes:
+      - /home/ubuntu/javiermix_web/public/img:/app/dist/client/img
+      - /home/ubuntu/javiermix_web/public/media:/app/dist/client/media
     networks:
       - javiermix_network
 
