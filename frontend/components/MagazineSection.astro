@@ -1,10 +1,11 @@
 ---
 // h:\Javiermix_web_v2\frontend\components\MagazineSection.astro
-const DIRECTUS_URL = process.env.DIRECTUS_URL || 'https://admin.javiermix.ar';
+const PUBLIC_DIRECTUS_URL = process.env.PUBLIC_DIRECTUS_URL || 'https://admin.javiermix.ar';
+const INTERNAL_DIRECTUS_URL = process.env.INTERNAL_DIRECTUS_URL || PUBLIC_DIRECTUS_URL;
 
 let fetchedArticles = [];
 try {
-  const response = await fetch(`${DIRECTUS_URL}/items/magazine?filter[status][_eq]=published&sort=-created_at&limit=3`);
+  const response = await fetch(`${INTERNAL_DIRECTUS_URL}/items/magazine?filter[status][_eq]=published&sort=-created_at&limit=3`);
   const data = await response.json();
   fetchedArticles = data.data || [];
 } catch (e) {
@@ -18,7 +19,7 @@ function resolveMediaURL(url: string | null): string {
   const cleanUrl = url.includes(',') ? url.split(',')[0].trim() : url;
   
   if (cleanUrl.startsWith('http') || cleanUrl.startsWith('/')) return cleanUrl;
-  if (cleanUrl.length === 36 && cleanUrl.includes('-')) return `https://admin.javiermix.ar/assets/${cleanUrl}`;
+  if (cleanUrl.length === 36 && cleanUrl.includes('-')) return `${PUBLIC_DIRECTUS_URL}/assets/${cleanUrl}`;
   return `/uploads/revista/${cleanUrl}`;
 }
 

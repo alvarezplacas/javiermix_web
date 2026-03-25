@@ -9,7 +9,9 @@ import CollectorJoin from '../components/CollectorJoin.astro';
 export const prerender = false;
 
 // 1. Fetching Home visual assets from Directus via API (Public)
-const DIRECTUS_URL = process.env.DIRECTUS_URL || 'https://admin.javiermix.ar';
+// Configuración de URLs (Pública vs Interna para Docker)
+const PUBLIC_DIRECTUS_URL = process.env.PUBLIC_DIRECTUS_URL || 'https://admin.javiermix.ar';
+const INTERNAL_DIRECTUS_URL = process.env.INTERNAL_DIRECTUS_URL || PUBLIC_DIRECTUS_URL;
 
 let homeAssets = [];
 try {
@@ -24,7 +26,7 @@ try {
     if (folder) {
         console.log(`[Home] Folder "home" found with ID: ${folder.id}`);
         // 2. Get files in that folder
-        const filesRes = await fetch(`${DIRECTUS_URL}/files?filter[folder][_eq]=${folder.id}&sort=filename_download`);
+        const filesRes = await fetch(`${INTERNAL_DIRECTUS_URL}/files?filter[folder][_eq]=${folder.id}&sort=filename_download`);
         const filesData = await filesRes.json();
         homeAssets = filesData.data || [];
         console.log(`[Home] Found ${homeAssets.length} assets in "home" folder.`);
@@ -34,7 +36,7 @@ try {
 
     // 3. Fallback: if no folder found or empty, try any recent files
     if (homeAssets.length === 0) {
-        const anyRes = await fetch(`${DIRECTUS_URL}/files?limit=5&sort=-created_on`);
+        const anyRes = await fetch(`${INTERNAL_DIRECTUS_URL}/files?limit=5&sort=-created_on`);
         const anyData = await anyRes.json();
         homeAssets = anyData.data || [];
     }
@@ -49,7 +51,7 @@ if (homeAssets.length === 0) {
 
 function getAssetUrl(id: string) {
     if (id === 'fallback') return '/img/Series/Monumentos/01.avif'; 
-    return `${DIRECTUS_URL}/assets/${id}`;
+    return `${PUBLIC_DIRECTUS_URL}/assets/${id}`;
 }
 ---
 

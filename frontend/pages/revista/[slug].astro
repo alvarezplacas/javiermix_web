@@ -1,9 +1,11 @@
+```
 ---
 // h:\Javiermix_web_v2\frontend\magazine\[slug].astro
 import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-const DIRECTUS_URL = process.env.DIRECTUS_URL || 'https://admin.javiermix.ar';
+const PUBLIC_DIRECTUS_URL = process.env.PUBLIC_DIRECTUS_URL || 'https://admin.javiermix.ar';
+const INTERNAL_DIRECTUS_URL = process.env.INTERNAL_DIRECTUS_URL || PUBLIC_DIRECTUS_URL;
 
 export const prerender = false;
 const { slug } = Astro.params;
@@ -11,7 +13,7 @@ const { slug } = Astro.params;
 // Fetch article from Directus API
 let articulo = null;
 try {
-  const response = await fetch(`${DIRECTUS_URL}/items/magazine?filter[slug][_eq]=${slug}&limit=1`);
+  const response = await fetch(`${INTERNAL_DIRECTUS_URL}/items/magazine?filter[slug][_eq]=${slug}&limit=1`);
   const data = await response.json();
   articulo = data.data?.[0];
 } catch (e) {

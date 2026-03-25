@@ -4,22 +4,29 @@
  * Asegura compatibilidad local evitando errores ECONNREFUSED de SQL.
  */
 
-export const DIRECTUS_URL = import.meta.env.PUBLIC_DIRECTUS_URL || 
-                    process.env.PUBLIC_DIRECTUS_URL || 
-                    process.env.DIRECTUS_URL || 
-                    'https://admin.javiermix.ar';
+// URL pública para Assets (Imágenes/Videos que ve el cliente)
+export const PUBLIC_DIRECTUS_URL = import.meta.env.PUBLIC_DIRECTUS_URL || 
+                             process.env.PUBLIC_DIRECTUS_URL || 
+                             'https://admin.javiermix.ar';
+
+// URL interna para Fetching (SSR que ejecuta el servidor)
+export const INTERNAL_DIRECTUS_URL = process.env.INTERNAL_DIRECTUS_URL || 
+                               PUBLIC_DIRECTUS_URL;
+
+// Usamos la interna para todas las peticiones fetch de servidor
+const FETCH_URL = INTERNAL_DIRECTUS_URL;
 
 /**
  * Obtiene todas las series (carpetas) dentro de la carpeta "Catalogo".
  */
 export async function getSeries() {
   try {
-    const folderRes = await fetch(`${DIRECTUS_URL}/folders?filter[name][_eq]=Catalogo`);
+    const folderRes = await fetch(`${FETCH_URL}/folders?filter[name][_eq]=Catalogo`);
     const folderData = await folderRes.json();
     const parentFolder = folderData.data?.[0];
     if (!parentFolder) return [];
 
-    const subfoldersRes = await fetch(`${DIRECTUS_URL}/folders?filter[parent][_eq]=${parentFolder.id}`);
+    const subfoldersRes = await fetch(`${FETCH_URL}/folders?filter[parent][_eq]=${parentFolder.id}`);
     const subfoldersData = await subfoldersRes.json();
     return subfoldersData.data || [];
   } catch (error) {
@@ -38,7 +45,7 @@ export async function getCatalogoFiles() {
         let allFiles: any[] = [];
 
         for (const serie of series) {
-            const res = await fetch(`${DIRECTUS_URL}/files?filter[folder][_eq]=${serie.id}`);
+            const res = await fetch(`${FETCH_URL}/files?filter[folder][_eq]=${serie.id}`);
             const data = await res.json();
             const files = (data.data || []).map((f: any) => ({
                 ...f,
@@ -59,12 +66,12 @@ export async function getCatalogoFiles() {
 export async function getSerieDetails(serieId: string) {
     try {
         // 1. Info de carpeta
-        const folderRes = await fetch(`${DIRECTUS_URL}/folders/${serieId}`);
+        const folderRes = await fetch(`${FETCH_URL}/folders/${serieId}`);
         const folderData = await folderRes.json();
         const name = folderData.data?.name?.replace(/_/g, ' ').toUpperCase() || "Serie";
 
         // 2. Archivos en esa carpeta
-        const filesRes = await fetch(`${DIRECTUS_URL}/files?filter[folder][_eq]=${serieId}&sort=filename_download`);
+        const filesRes = await fetch(`${FETCH_URL}/files?filter[folder][_eq]=${serieId}&sort=filename_download`);
         const filesData = await filesRes.json();
         const items = filesData.data || [];
 
@@ -80,14 +87,14 @@ export async function getSerieDetails(serieId: string) {
  */
 export async function getArtworkDetails(id: string) {
     try {
-        const fileRes = await fetch(`${DIRECTUS_URL}/files/${id}`);
+        const fileRes = await fetch(`${FETCH_URL}/files/${id}`);
         const fileData = await fileRes.json();
         if (!fileData.data) return null;
 
         const mainFile = fileData.data;
 
         // Metadatos adicionales de la colección 'artworks'
-        const artRes = await fetch(`${DIRECTUS_URL}/items/artworks?filter[filename][_eq]=${mainFile.filename_download}&limit=1`);
+        const artRes = await fetch(`${FETCH_URL}/items/artworks?filter[filename][_eq]=${mainFile.filename_download}&limit=1`);
         const artData = await artRes.json();
         const meta = artData.data?.[0] || null;
 
@@ -103,7 +110,7 @@ export async function getArtworkDetails(id: string) {
  */
 export async function getArtworkLikes(artworkId: string) {
     try {
-        const res = await fetch(`${DIRECTUS_URL}/items/artwork_likes_tracking?filter[artwork_id][_eq]=${artworkId}&aggregate[count]=*`);
+        const res = await fetch(`${FETCH_URL}/items/artwork_likes_tracking?filter[artwork_id][_eq]=${artworkId}&aggregate[count]=*`);
         const data = await res.json();
         return data.data?.[0]?.count || 0;
     } catch (error) {
@@ -117,7 +124,7 @@ export async function getArtworkLikes(artworkId: string) {
  */
 export async function checkUserLike(artworkId: string, ip: string) {
     try {
-        const res = await fetch(`${DIRECTUS_URL}/items/artwork_likes_tracking?filter[artwork_id][_eq]=${artworkId}&filter[ip_address][_eq]=${ip}&limit=1`);
+        const res = await fetch(`${FETCH_URL}/items/artwork_likes_tracking?filter[artwork_id][_eq]=${artworkId}&filter[ip_address][_eq]=${ip}&limit=1`);
         const data = await res.json();
         return data.data?.length > 0;
     } catch (error) {
@@ -133,7 +140,7 @@ export async function addLike(artworkId: string, ip: string) {
         const hasLiked = await checkUserLike(artworkId, ip);
         if (hasLiked) return { success: false, message: "Ya has dado like a esta obra." };
 
-        const res = await fetch(`${DIRECTUS_URL}/items/artwork_likes_tracking`, {
+        const res = await fetch(`${FETCH_URL}/items/artwork_likes_tracking`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ artwork_id: artworkId, ip_address: ip })
@@ -151,7 +158,7 @@ export async function addLike(artworkId: string, ip: string) {
  */
 export async function loginAdmin(email: string, password: string) {
     try {
-        const res = await fetch(`${DIRECTUS_URL}/auth/login`, {
+        const res = await fetch(`${FETCH_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
@@ -179,7 +186,7 @@ export async function loginAdmin(email: string, password: string) {
  */
 export async function getArtworks() {
     try {
-        const res = await fetch(`${DIRECTUS_URL}/items/artworks?sort=serie_id,title`);
+        const res = await fetch(`${FETCH_URL}/items/artworks?sort=serie_id,title`);
         const data = await res.json();
         return data.data || [];
     } catch (error) {
@@ -198,7 +205,7 @@ export async function createArtwork(artworkData: any, token?: string) {
         };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        const res = await fetch(`${DIRECTUS_URL}/items/artworks`, {
+        const res = await fetch(`${FETCH_URL}/items/artworks`, {
             method: 'POST',
             headers,
             body: JSON.stringify(artworkData)
@@ -217,7 +224,7 @@ export async function createArtwork(artworkData: any, token?: string) {
  */
 export async function getArtworkById(id: string) {
     try {
-        const res = await fetch(`${DIRECTUS_URL}/items/artworks/${id}`);
+        const res = await fetch(`${FETCH_URL}/items/artworks/${id}`);
         const data = await res.json();
         return data.data || null;
     } catch (error) {
@@ -236,7 +243,7 @@ export async function updateArtwork(id: string, artworkData: any, token?: string
         };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        const res = await fetch(`${DIRECTUS_URL}/items/artworks/${id}`, {
+        const res = await fetch(`${FETCH_URL}/items/artworks/${id}`, {
             method: 'PATCH',
             headers,
             body: JSON.stringify(artworkData)
@@ -263,7 +270,7 @@ export async function uploadFile(file: File, token?: string) {
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const res = await fetch(`${DIRECTUS_URL}/files`, {
+        const res = await fetch(`${FETCH_URL}/files`, {
             method: 'POST',
             headers,
             body: formData
@@ -288,7 +295,7 @@ export async function getArticles(token?: string) {
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const url = `${DIRECTUS_URL}/items/magazine`;
+        const url = `${FETCH_URL}/items/magazine`;
         console.log(`[getArticles] Fetching from ${url} (Token: ${token ? 'YES' : 'NO'})`);
         
         const res = await fetch(url, { headers });
@@ -320,7 +327,7 @@ export async function createArticle(articleData: any, token?: string) {
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const res = await fetch(`${DIRECTUS_URL}/items/magazine`, {
+        const res = await fetch(`${FETCH_URL}/items/magazine`, {
             method: 'POST',
             headers,
             body: JSON.stringify(articleData)
@@ -344,7 +351,7 @@ export async function getArticleDetails(id: string, token?: string) {
             headers['Authorization'] = `Bearer ${token}`;
         }
         
-        const url = `${DIRECTUS_URL}/items/magazine/${id}`;
+        const url = `${FETCH_URL}/items/magazine/${id}`;
         console.log(`[getArticleDetails] Fetching item ${id} from ${url}`);
         
         const res = await fetch(url, { headers });
@@ -376,7 +383,7 @@ export async function updateArticle(id: string, articleData: any, token?: string
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        const res = await fetch(`${DIRECTUS_URL}/items/magazine/${id}`, {
+        const res = await fetch(`${FETCH_URL}/items/magazine/${id}`, {
             method: 'PATCH',
             headers,
             body: JSON.stringify(articleData)
@@ -400,7 +407,7 @@ export async function getCertificates(token?: string) {
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
         // Usamos fields=*.* para traer datos de las relaciones artwork_id y collector_id
-        const res = await fetch(`${DIRECTUS_URL}/items/certificates?fields=*,artwork_id.*,collector_id.*&sort=-sale_date`, { headers });
+        const res = await fetch(`${FETCH_URL}/items/certificates?fields=*,artwork_id.*,collector_id.*&sort=-sale_date`, { headers });
         const data = await res.json();
         return data.data || [];
     } catch (error) {
@@ -417,7 +424,7 @@ export async function getCertificateByUuid(uuid: string, token?: string) {
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        const res = await fetch(`${DIRECTUS_URL}/items/certificates?filter[uuid][_eq]=${uuid}&fields=*,artwork_id.*,collector_id.*&limit=1`, { headers });
+        const res = await fetch(`${FETCH_URL}/items/certificates?filter[uuid][_eq]=${uuid}&fields=*,artwork_id.*,collector_id.*&limit=1`, { headers });
         const data = await res.json();
         return data.data?.[0] || null;
     } catch (error) {
@@ -434,7 +441,7 @@ export async function createCollector(collectorData: any, token?: string) {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        const res = await fetch(`${DIRECTUS_URL}/items/collectors`, {
+        const res = await fetch(`${FETCH_URL}/items/collectors`, {
             method: 'POST',
             headers,
             body: JSON.stringify(collectorData)
@@ -455,7 +462,7 @@ export async function createCertificate(certData: any, token?: string) {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        const res = await fetch(`${DIRECTUS_URL}/items/certificates`, {
+        const res = await fetch(`${FETCH_URL}/items/certificates`, {
             method: 'POST',
             headers,
             body: JSON.stringify(certData)
